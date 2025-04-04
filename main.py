@@ -1,49 +1,58 @@
-print("🔥 Starting detection system...")
-
 import cv2
-from app.detection import detect_objects
-from app.json_logger import log_detection 
+import mediapipe as mp
+from movement import GestureRecognition  # ✅ Using your original SOS logic
 
-cap = cv2.VideoCapture(0)
-print("🎥 Trying to access webcam...")
+# Initialize MediaPipe for holistic model
+mp_drawing = mp.solutions.drawing_utils
+mp_holistic = mp.solutions.holistic
+holistic = mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-if not cap.isOpened():
-    print("❌ Error: Cannot open webcam")
-    exit()
-else:
-    print("✅ Webcam opened successfully!")
+# Your custom gesture detection logic
+gesture_detector = GestureRecognition()
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("⚠️ Failed to grab frame.")
-        break
+# Function to process video stream with Gesture Recognition and Person Detection
+def process_video_stream(index=0):
+    cap = cv2.VideoCapture(index)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # Detect objects and scene
-    detections, scene = detect_objects(frame)
+    if not cap.isOpened():
+        print("❌ Cannot open camera. Check index.")
+        return
 
-    # Log detection
-    log_detection(detections, scene)
+    print("🔥 Starting real-time video analytics with Gesture SOS detection and Person Detection...")
 
-    # Draw detections
-    for x1, y1, x2, y2, cls, label in detections:
-        x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 2)
+    while True:
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            print("❌ Frame capture failed.")
+            break
 
-    # Draw scene text
-    cv2.putText(frame, f"Scene: {scene}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+        # Convert the image to RGB for MediaPipe
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Display window
-    cv2.imshow("YOLOv8 Detection with Scene Context", frame)
+        # Run holistic model to detect person and hand landmarks
+        holistic_results = holistic.process(rgb_frame)
 
-    # Exit condition
-    if cv2.waitKey(1) & 0xFF == ord("q"):
-        print("🛑 Exiting detection loop.")
-        break
+        # Person Detection (check if pose landmarks exist)
+        if holistic_results.pose_landmarks:
+            mp_drawing.draw_landmarks(frame, holistic_results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
+            print("✅ Person detected")
 
-# Cleanup
-cap.release()
-cv2.destroyAllWindows()
+        # Use gesture recognition logic from movement.py
+        frame, sos_triggered = gesture_detector.recognize_gesture(frame)
+        if sos_triggered:
+            print("🚨 SOS Gesture Detected!")
+
+        # Display frame
+        cv2.imshow("Real-Time Gesture + Person Detection", frame)
+
+        # Exit on 'q' key
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    process_video_stream(index=0)
